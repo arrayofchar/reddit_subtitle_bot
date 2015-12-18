@@ -1,5 +1,8 @@
 import praw, os, sys, httplib2, urlparse, urllib2, re
 
+from Pastebin import PastebinAPI
+pastebin_api = PastebinAPI()
+
 import xml.etree.ElementTree as ET
 from prawoauth2 import PrawOAuth2Mini
 
@@ -23,7 +26,7 @@ CHAR_LIMIT = 10000
 
 HEADER = 'Hey, looks like there is closed captioning in this video. Let me get that for ya.\n\n'
 
-subreddits = ['documentaries', ] #'educativevideos', 'lectures', 'science', 'documentaries'
+subreddits = ['educativevideos', ] #'educativevideos', 'lectures', 'science', 'documentaries'
 
 args = argparser.parse_args()
 
@@ -49,15 +52,15 @@ class SubtitleBot(object):
     
     r_oauth = None
     g_oauth = None
-    old_id_set = None
+    pastebin_key = None
+    old_id_set = set()
     
     
     def __init__(self):
         temp_list = []
         with open('subbot.db', 'r') as f:
             for line in f:
-                temp_list.append(line)
-        self.old_id_set = set(temp_list)
+                self.old_id_set.add(line.strip())
         
         app_key = os.getenv('SUBTITLE_BOT_APP_KEY')
         app_secret = os.getenv('SUBTITLE_BOT_APP_SECRET')
@@ -66,6 +69,13 @@ class SubtitleBot(object):
         self.r_oauth = PrawOAuth2Mini(self.r, app_key=app_key,
                               app_secret=app_secret, access_token=access_token,
                               scopes=scopes, refresh_token=refresh_token)
+        
+        self.pastebin_key = os.getenv('PASTEBIN_API_KEY')
+#         pastebin_username = os.getenv('PASTEBIN_USERNAME')
+#         pastebin_password = os.getenv('PASTEBIN_PASSWORD')
+#         self.pastebin_key = pastebin_api.generate_user_key(pastebin_api_key,
+#                                                          pastebin_username,
+#                                                          pastebin_password)
         
         self.youtube = self.get_youtube_service()
     
@@ -151,11 +161,19 @@ class SubtitleBot(object):
                     final_text = HEADER+subtitle
                     submission = submissions[i]
                     if len(final_text) < CHAR_LIMIT:
+                        # post comment as is
                         submission.add_comment(final_text)
-                        print final_text
                     else:
-                        print len(final_text)
-                        submission.add_comment(final_text[:CHAR_LIMIT])
+                        # post comment in pastebin
+                        pastebin_url = pastebin_api.paste(self.pastebin_key, subtitle.encode('utf8'),
+                                                         paste_name=submission.id, paste_private='public')
+                        pastebin_message = '[Here is the Pastebin link to the closed captioned text](%s)' % (pastebin_url)
+                        submission.add_comment(HEADER+pastebin_message)
+                    print len(final_text)
+                    self.old_id_set.add(submission.id)
+                    with open('subbot.db', 'a') as f:
+                        f.write(submission.id)
+                        f.write('\n')
                     
             
     def get_videos(self):
@@ -165,7 +183,7 @@ class SubtitleBot(object):
             subreddit = self.r.get_subreddit(subreddit_name)
             for submission in subreddit.get_hot(limit=self.request_limit):
                 url = submission.url
-                if 'youtube.com' in url:
+                if submission.id not in self.old_id_set and 'youtube.com' in url:
                     url_data = urlparse.urlparse(url)
                     query = urlparse.parse_qs(url_data.query)
                     batch.append(query)

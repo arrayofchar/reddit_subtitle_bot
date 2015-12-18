@@ -7,4 +7,5 @@ Users following libraries:
 * prawoauth2: https://github.com/avinassh/prawoauth2
 * google-api-python-client 1.4.2: https://pypi.python.org/pypi/google-api-python-client/
 * httplib2: https://pypi.python.org/pypi/httplib2
+* Pastebin for Python: https://pypi.python.org/pypi/Pastebin
 
