@@ -21,12 +21,12 @@ YOUTUBE_PARTNER_SCOPE = 'https://www.googleapis.com/auth/youtubepartner'
 
 YOUTUBE_URL = 'https://www.youtube.com/api/timedtext?v=%s&lang=en'
 
-BATCH_SIZE = 50
+BATCH_SIZE = 500
 CHAR_LIMIT = 10000
 
 HEADER = 'Hey, looks like there is closed captioning in this video. Let me get that for ya.\n\n'
 
-subreddits = ['educativevideos', ] #'educativevideos', 'lectures', 'science', 'documentaries'
+subreddits = ['educativevideos', 'lectures', 'science', 'documentaries']
 
 args = argparser.parse_args()
 
@@ -45,7 +45,7 @@ def _js_parseInt(string):
 
 class SubtitleBot(object):
         
-    request_limit = 10
+    request_limit = 50
     
     r = praw.Reddit(user_agent=user_agent)
     youtube = None
@@ -57,7 +57,6 @@ class SubtitleBot(object):
     
     
     def __init__(self):
-        temp_list = []
         with open('subbot.db', 'r') as f:
             for line in f:
                 self.old_id_set.add(line.strip())
@@ -71,13 +70,10 @@ class SubtitleBot(object):
                               scopes=scopes, refresh_token=refresh_token)
         
         self.pastebin_key = os.getenv('PASTEBIN_API_KEY')
-#         pastebin_username = os.getenv('PASTEBIN_USERNAME')
-#         pastebin_password = os.getenv('PASTEBIN_PASSWORD')
-#         self.pastebin_key = pastebin_api.generate_user_key(pastebin_api_key,
-#                                                          pastebin_username,
-#                                                          pastebin_password)
         
         self.youtube = self.get_youtube_service()
+
+        self.r.login(disable_warning=True)
     
     
     def get_youtube_service(self):
@@ -145,8 +141,6 @@ class SubtitleBot(object):
         batch, submissions = self.get_videos()
         print batch
         
-        self.r.login(disable_warning=True)
-        
         for i, query in enumerate(batch):
             if 'v' in query:
                 video_id = query['v'][0]
@@ -166,7 +160,8 @@ class SubtitleBot(object):
                     else:
                         # post comment in pastebin
                         pastebin_url = pastebin_api.paste(self.pastebin_key, subtitle.encode('utf8'),
-                                                         paste_name=submission.id, paste_private='public')
+                                                         paste_name='%s (%s)' % (submission.title, submission.id),
+                                                         paste_private='public')
                         pastebin_message = '[Here is the Pastebin link to the closed captioned text](%s)' % (pastebin_url)
                         submission.add_comment(HEADER+pastebin_message)
                     print len(final_text)
@@ -215,13 +210,13 @@ class SubtitleBot(object):
 if __name__ == '__main__':
     bot = SubtitleBot()
     
-    bot.run_bot()
-    
-    while False:
+    while True:
         try:
             bot.run_bot()
         except praw.errors.OAuthInvalidToken:
             bot.r_oauth.refresh()
+        except praw.errors.APIException:
+            continue
 
 
 
